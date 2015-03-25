@@ -19,31 +19,41 @@ rpy.factory('rPyProxy', function($q, $http) {
         };
     };
 
-    function makeObject(base_url, id, methods, members) {
-        var o = new Object();
-        Object.defineProperty(o, '_rpy_id', { value: id, enumerable: false })
+    function makeObject(base_url, data) {
+        if (typeof data == 'object' && ('serializer' in data) && ('id' in data) && ('class' in data))
+        {
+            var o = new Object();
+            Object.defineProperty(o, '_id', { value: data.id, enumerable: false });
+            Object.defineProperty(o, '_class', { value: data.class, enumerable: false });
+            Object.defineProperty(o, '_serializer', { value: data.serializer, enumerable: false });
 
-        Object.keys(members).forEach(function (m) {
-            Object.defineProperty(o, m, {
-                value: members[m],
-                writable: false,
-                enumerable: true,
+            o.toJSON = function() {
+                return { id: data.id, class: data.class, serializer: data.serializer }
+            };
+
+            Object.keys(data.members).forEach(function (m) {
+                Object.defineProperty(o, m, {
+                    value: data.members[m],
+                    writable: false,
+                    enumerable: true,
+                });
             });
-        });
 
-        methods.forEach(function (m) {
-            Object.defineProperty(o, m, {
-                get: function() {
-                    // i hate this fucking primitive language
-                    return function(args, varargs) {
-                        return rPyProxy(base_url, id, m, { args: args, varargs: varargs });
-                    }
-                },
-                enumerable: true,
+            data.methods.forEach(function (m) {
+                Object.defineProperty(o, m, {
+                    get: function() {
+                        // i hate this fucking primitive language
+                        return function(args, kwargs) {
+                            return rPyProxy(base_url, data.id, m, { args: args, kwargs: kwargs });
+                        }
+                    },
+                    enumerable: true,
+                });
             });
-        });
 
-        return o;
+            return o;
+        }
+        else return data;
     };
 
     function rPyProxy(base_url, id, method, args)
@@ -52,7 +62,7 @@ rpy.factory('rPyProxy', function($q, $http) {
         else var config = POST(base_url + '/' + id + '/' + method, args)
 
         var p = $http(config).then(function (result) {
-            return makeObject(base_url, result.data.id, result.data.methods, result.data.members);
+            return makeObject(base_url, result.data);
         });
 
         return p;
